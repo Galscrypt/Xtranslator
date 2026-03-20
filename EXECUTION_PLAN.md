@@ -76,6 +76,21 @@ Target files:
 - `axiom/observer.js`
 - `padre/padre-observer.js`
 
+### Stage G — Mandatory Safety Controls
+Status: Completed
+- Added strict fallback/request limits:
+  - `MAX_PROVIDERS_PER_REQUEST = 4`
+  - `MAX_QUALITY_FALLBACK_ATTEMPTS = 2`
+  - `MAX_REQUEST_MS = 6500`
+- Added safer glossary boundaries to avoid accidental partial-word replacements.
+- Added provider-rank decay and controlled re-check (exploration) to avoid permanent rank lock-in.
+
+Files:
+- `axiom/constants.js`
+- `padre/constants.js`
+- `axiom/translator.js`
+- `padre/translator.js`
+
 ## Safety Rules
 - No architecture rewrite.
 - No multi-domain large patch in one step.

@@ -62,13 +62,23 @@ class TextPreprocessor {
     return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
   }
 
+  _buildGlossaryPattern(from) {
+    const escaped = this._escapeRegex(from.trim()).replace(/\\\s+/g, '\\s+');
+    const unicodeBoundary = '\\p{L}\\p{N}_';
+    try {
+      return new RegExp('(^|[^' + unicodeBoundary + '])(' + escaped + ')(?=$|[^' + unicodeBoundary + '])', 'giu');
+    } catch (_) {
+      return new RegExp('(^|[^a-z0-9_])(' + escaped + ')(?=$|[^a-z0-9_])', 'gi');
+    }
+  }
+
   _compileMapRules(mapObj) {
     const entries = Object.entries(mapObj || {})
       .filter(([k, v]) => typeof k === 'string' && k.trim() && typeof v === 'string' && v.trim())
       .sort((a, b) => b[0].length - a[0].length);
     const rules = [];
     for (const [from, to] of entries) {
-      const pattern = new RegExp('(^|[^a-z0-9_])(' + this._escapeRegex(from) + ')(?=$|[^a-z0-9_])', 'gi');
+      const pattern = this._buildGlossaryPattern(from);
       rules.push({ pattern, replacement: to });
     }
     return rules;
@@ -405,6 +415,11 @@ class TranslationService {
     this._loadUnknownTerms().catch(() => {});
     this._apiPerf = new Map();
     this._apiPerfWindowMs = 12 * 60 * 60 * 1000;
+    this._apiPerfHalfLifeMs = Math.max(60 * 60 * 1000, Number(CONFIG.PROVIDER_RANK?.HALF_LIFE_MS || (24 * 60 * 60 * 1000)));
+    this._apiPerfDecayIntervalMs = Math.max(60 * 1000, Number(CONFIG.PROVIDER_RANK?.DECAY_INTERVAL_MS || (15 * 60 * 1000)));
+    this._providerExploreAfterMs = Math.max(10 * 60 * 1000, Number(CONFIG.PROVIDER_RANK?.EXPLORE_STALE_AFTER_MS || (2 * 60 * 60 * 1000)));
+    this._providerExploreChance = Math.max(0, Math.min(1, Number(CONFIG.PROVIDER_RANK?.EXPLORE_CHANCE ?? 0.2)));
+    this._lastApiPerfDecayAt = 0;
     this._apiPerfLoaded = false;
     this._apiPerfSaveTimer = null;
     this._loadApiPerf().catch(() => {});
@@ -633,7 +648,61 @@ class TranslationService {
     this._scheduleApiPerfSave();
   }
 
+  _getTranslationPolicy() {
+    const p = CONFIG.TRANSLATION_POLICY || {};
+    return {
+      maxProviders: Math.max(1, Math.floor(Number(p.MAX_PROVIDERS_PER_REQUEST || 4))),
+      maxQualityFallbackAttempts: Math.max(0, Math.floor(Number(p.MAX_QUALITY_FALLBACK_ATTEMPTS || 2))),
+      maxRequestMs: Math.max(1500, Math.floor(Number(p.MAX_REQUEST_MS || 6500)))
+    };
+  }
+
+  _getLastProviderAttemptTs(name) {
+    const p = this._apiPerf.get(name);
+    if (!p) return 0;
+    return Math.max(Number(p.lastOk || 0), Number(p.lastFail || 0));
+  }
+
+  _applyApiPerfDecay(force = false) {
+    const now = Date.now();
+    if (!force && (now - this._lastApiPerfDecayAt) < this._apiPerfDecayIntervalMs) return;
+    this._lastApiPerfDecayAt = now;
+
+    let changed = false;
+    for (const [name, p] of this._apiPerf.entries()) {
+      const lastSeen = Math.max(Number(p.lastOk || 0), Number(p.lastFail || 0));
+      if (!lastSeen) continue;
+      const ageMs = now - lastSeen;
+      if (ageMs < this._apiPerfHalfLifeMs) continue;
+
+      const factor = Math.pow(0.5, ageMs / this._apiPerfHalfLifeMs);
+      const ok = Number((Number(p.ok || 0) * factor).toFixed(3));
+      const fail = Number((Number(p.fail || 0) * factor).toFixed(3));
+      const qfail = Number((Number(p.qfail || 0) * factor).toFixed(3));
+      const latCount = Number((Number(p.latCount || 0) * factor).toFixed(3));
+
+      if (ok !== p.ok || fail !== p.fail || qfail !== p.qfail || latCount !== p.latCount) {
+        p.ok = ok;
+        p.fail = fail;
+        p.qfail = qfail;
+        p.latCount = latCount;
+        changed = true;
+      }
+
+      const total = p.ok + p.fail + p.qfail;
+      if (total < 0.1 && ageMs > (this._apiPerfHalfLifeMs * 3)) {
+        this._apiPerf.delete(name);
+        changed = true;
+      }
+    }
+
+    if (changed) {
+      this._scheduleApiPerfSave();
+    }
+  }
+
   _apiPerfScore(name) {
+    this._applyApiPerfDecay(false);
     const p = this._ensureApiPerf(name);
     const total = p.ok + p.fail + p.qfail;
     const successRate = total > 0 ? (p.ok / total) : 0.65;
@@ -642,6 +711,35 @@ class TranslationService {
     const hardFailPenalty = p.fail * 1.5;
     const recentBoost = p.lastOk && (Date.now() - p.lastOk) < this._apiPerfWindowMs ? 4 : 0;
     return successRate * 100 - latencyPenalty - qualityPenalty - hardFailPenalty + recentBoost;
+  }
+
+  _selectProvidersForRequest(available, maxProviders) {
+    const ordered = this._orderForWaveRace(available);
+    if (ordered.length <= maxProviders) return ordered;
+
+    const selected = ordered.slice(0, maxProviders);
+    if ((CONFIG.FEATURES?.ENABLE_DYNAMIC_PROVIDER_ORDER === false) || this._providerExploreChance <= 0) {
+      return selected;
+    }
+
+    if (Math.random() >= this._providerExploreChance) return selected;
+
+    const now = Date.now();
+    let candidate = null;
+    let bestAge = -1;
+    for (const api of ordered.slice(maxProviders)) {
+      const lastSeen = this._getLastProviderAttemptTs(api.name);
+      const age = lastSeen ? (now - lastSeen) : Number.MAX_SAFE_INTEGER;
+      if (age < this._providerExploreAfterMs) continue;
+      if (age > bestAge) {
+        bestAge = age;
+        candidate = api;
+      }
+    }
+
+    if (!candidate) return selected;
+    selected[selected.length - 1] = candidate;
+    return selected;
   }
 
   getProviderPerformance(limit = 20) {
@@ -695,6 +793,7 @@ class TranslationService {
         });
       }
     }
+    this._applyApiPerfDecay(true);
     this._apiPerfLoaded = true;
   }
 
@@ -874,6 +973,8 @@ class TranslationService {
 
   async _translateWithFallback(text, priority = false) {
     const qualityGateEnabled = CONFIG.FEATURES?.ENABLE_QUALITY_GATE !== false;
+    const policy = this._getTranslationPolicy();
+    const deadlineTs = Date.now() + policy.maxRequestMs;
     const { cleanText, placeholders } = this.preprocessor.preprocess(text);
 
     if (placeholders.length > 0) {
@@ -957,8 +1058,10 @@ class TranslationService {
       }
     }
 
-    if (available.length >= 2) {
-      const rawResult = await this._waveRace(available, cleanText);
+    const selectedApis = this._selectProvidersForRequest(available, policy.maxProviders);
+
+    if (selectedApis.length >= 2) {
+      const rawResult = await this._waveRace(selectedApis, cleanText, deadlineTs);
       if (rawResult) {
         const finalResult = this.preprocessor.postprocess(rawResult.raw, placeholders);
         if (!qualityGateEnabled) {
@@ -991,9 +1094,12 @@ class TranslationService {
         if (this.diagnostics) this.diagnostics.recordQualityGateFailure(check.reason, rawResult.api.name);
         this._recordApiFailure(rawResult.api.name, true);
 
-        for (const api of available) {
+        let qualityFallbackAttempts = 0;
+        for (const api of selectedApis) {
+          if (qualityFallbackAttempts >= policy.maxQualityFallbackAttempts) break;
           if (api === rawResult.api) continue;
-          const altRaw = await this._tryOneApi(api, cleanText);
+          const altRaw = await this._tryOneApi(api, cleanText, deadlineTs);
+          qualityFallbackAttempts++;
           if (!altRaw) continue;
           const altResult = this.preprocessor.postprocess(altRaw, placeholders);
           const altCheck = this._validateFinalTranslation(altResult, text);
@@ -1017,18 +1123,18 @@ class TranslationService {
         }
       }
     } else {
-      const result = await this._tryOneApi(available[0], cleanText);
+      const result = await this._tryOneApi(selectedApis[0], cleanText, deadlineTs);
       if (result) {
         const finalResult = this.preprocessor.postprocess(result, placeholders);
         if (!qualityGateEnabled) {
           const hash = textHash(text);
           this.cache.set(hash, finalResult);
           this.stats.translated++;
-          this.lastUsedApi = available[0].name;
-          this._recordApiSuccess(available[0].name, Date.now() - t0);
+          this.lastUsedApi = selectedApis[0].name;
+          this._recordApiSuccess(selectedApis[0].name, Date.now() - t0);
           this._reportStats();
           if (CONFIG.DEBUG) {
-            console.log('[AxiomTranslator] OK via ' + available[0].name + ' (solo, ' + (Date.now() - t0) + 'ms)');
+            console.log('[AxiomTranslator] OK via ' + selectedApis[0].name + ' (solo, ' + (Date.now() - t0) + 'ms)');
           }
           return finalResult;
         }
@@ -1037,18 +1143,18 @@ class TranslationService {
           const hash = textHash(text);
           this.cache.set(hash, finalResult);
           this.stats.translated++;
-          this.lastUsedApi = available[0].name;
-          this._recordApiSuccess(available[0].name, Date.now() - t0);
+          this.lastUsedApi = selectedApis[0].name;
+          this._recordApiSuccess(selectedApis[0].name, Date.now() - t0);
           this._reportStats();
           if (CONFIG.DEBUG) {
-            console.log('[AxiomTranslator] OK via ' + available[0].name + ' (solo, ' + (Date.now() - t0) + 'ms)');
+            console.log('[AxiomTranslator] OK via ' + selectedApis[0].name + ' (solo, ' + (Date.now() - t0) + 'ms)');
           }
           return finalResult;
         }
-        if (CONFIG.DEBUG) console.warn('[AxiomTranslator] Quality fail via ' + available[0].name + ': ' + check.reason);
-        this._trackUnknownTerms(text, available[0].name + ':' + check.reason);
-        if (this.diagnostics) this.diagnostics.recordQualityGateFailure(check.reason, available[0].name);
-        this._recordApiFailure(available[0].name, true);
+        if (CONFIG.DEBUG) console.warn('[AxiomTranslator] Quality fail via ' + selectedApis[0].name + ': ' + check.reason);
+        this._trackUnknownTerms(text, selectedApis[0].name + ':' + check.reason);
+        if (this.diagnostics) this.diagnostics.recordQualityGateFailure(check.reason, selectedApis[0].name);
+        this._recordApiFailure(selectedApis[0].name, true);
       }
     }
 
@@ -1076,8 +1182,7 @@ class TranslationService {
     return weighted.map(w => w.api);
   }
 
-  _waveRace(apis, cleanText) {
-    const ordered = this._orderForWaveRace(apis);
+  _waveRace(ordered, cleanText, deadlineTs = 0) {
 
     const googleEma = this._lastGoogleMs || 100;
     const bestMozhiEma = (ordered[1] && ordered[1]._isMozhi)
@@ -1094,11 +1199,13 @@ class TranslationService {
       const controllers = ordered.map(() => new AbortController());
       const startedAt = ordered.map(() => 0);
       const timers = [];
+      let deadlineTimer = null;
 
       const finish = (raw, api, idx) => {
         if (settled) return;
         settled = true;
         timers.forEach(clearTimeout);
+        if (deadlineTimer) clearTimeout(deadlineTimer);
         api.breaker.recordSuccess();
         const elapsed = startedAt[idx] ? (Date.now() - startedAt[idx]) : 0;
         this._recordApiSuccess(api.name, elapsed);
@@ -1120,6 +1227,7 @@ class TranslationService {
         if (++failures >= total) {
           settled = true;
           timers.forEach(clearTimeout);
+          if (deadlineTimer) clearTimeout(deadlineTimer);
           if (CONFIG.DEBUG && failReasons.length > 0) {
             console.error('[AxiomTranslator] ALL APIs FAILED (' + failReasons.length + ' errors):\n  \u2022 ' + failReasons.join('\n  \u2022 ') + '\n  Text: "' + cleanText.substring(0, 80) + '..."');
           }
@@ -1164,10 +1272,22 @@ class TranslationService {
           for (let i = 6; i < total; i++) startApi(i);
         }, wave4Delay));
       }
+
+      if (deadlineTs > 0) {
+        const remain = Math.max(1, deadlineTs - Date.now());
+        deadlineTimer = setTimeout(() => {
+          if (settled) return;
+          settled = true;
+          timers.forEach(clearTimeout);
+          controllers.forEach(ac => ac.abort());
+          resolve(null);
+        }, remain);
+      }
     });
   }
 
-  async _tryOneApi(api, cleanText) {
+  async _tryOneApi(api, cleanText, deadlineTs = 0) {
+    if (deadlineTs > 0 && Date.now() >= deadlineTs) return null;
     try {
       const ac = new AbortController();
       const t0 = Date.now();
