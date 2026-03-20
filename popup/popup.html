@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="stylesheet" href="popup.css">
+  <title>X Translator</title>
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+      <h1>X Translator</h1>
+      <span class="version" id="extVersion">v...</span>
+    </div>
+
+    <div class="toggle-row">
+      <span>Translate posts</span>
+      <label class="switch">
+        <input type="checkbox" id="toggleEnabled" checked>
+        <span class="slider"></span>
+      </label>
+    </div>
+
+    <div class="hint">
+      Click translated text to show original
+    </div>
+    <div id="actionStatus" class="action-status"></div>
+
+    <details class="glossary-editor">
+      <summary>Custom Glossary (JSON)</summary>
+      <textarea id="glossaryJson" spellcheck="false"></textarea>
+      <div class="editor-actions">
+        <button id="loadGlossaryBtn" class="action-btn secondary-btn" type="button">Load glossary</button>
+        <button id="applyGlossaryBtn" class="action-btn primary-btn" type="button">Apply glossary</button>
+      </div>
+    </details>
+
+    <details class="advanced-actions">
+      <summary>Advanced</summary>
+      <div class="actions">
+        <button id="resetUnknownBtn" class="action-btn secondary-btn" type="button">Reset slang log</button>
+        <button id="resetProviderPerfBtn" class="action-btn secondary-btn" type="button">Reset API rank</button>
+        <button id="resetGlossaryBtn" class="action-btn danger-btn" type="button">Reset custom glossary</button>
+        <button id="resetFlagsBtn" class="action-btn danger-btn" type="button">Reset feature flags</button>
+      </div>
+    </details>
+  </div>
+  <script src="popup.js"></script>
+</body>
+</html>

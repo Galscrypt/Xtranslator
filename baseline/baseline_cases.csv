@@ -1,0 +1,61 @@
+﻿case_id,domain,category,source_text,expected_ru_hint,priority
+1,both,ticker_and_slang,"$SOL is sending hard, i am aping this dip","SOL растет, агрессивно докупаю на просадке",high
+2,both,sentiment,"we are so back, bears are cooked","рынок оживает, медведи в плохой позиции",high
+3,both,scam,"dev rugged us in 10 minutes","разраб скамнул проект за 10 минут",high
+4,both,slang,"diamond hands only, no paper hands today","держим позицию крепко, без ранней фиксации",high
+5,both,slang,"ngmi if you keep panic selling every red candle","не вывезешь, если паникуешь на каждой красной свече",high
+6,both,slang,"wagmi if team ships and volume stays","все получится, если команда релизит и объем держится",high
+7,both,abbrev,"idk man this looks like a fake breakout tbh","не знаю, похоже на ложный пробой, если честно",high
+8,both,abbrev,"rn market is choppy af","сейчас рынок очень рваный",high
+9,both,abbrev,"imo this setup is clean, fr","по моему мнению, сетап хороший, реально",medium
+10,both,url_and_ticker,"$BTC reclaim + https://x.com/example/status/1","BTC вернул уровень, ссылка без искажений",high
+11,both,token_names,"stacking $ETH and $SOL for Q4","накапливаю ETH и SOL к Q4",high
+12,both,trading,"stop loss hit, re-enter lower","стоп выбило, перезайду ниже",medium
+13,both,trading,"no leverage, spot only","без плеча, только спот",medium
+14,both,defi,"farming rewards on this pool is still decent","доходность фарминга в этом пуле все еще нормальная",medium
+15,both,defi,"liquidity moved to another pool overnight","ликвидность за ночь ушла в другой пул",medium
+16,both,memecoin,"this memecoin has no utility but crazy momentum","у мемкоина нет утилити, но сильный импульс",high
+17,both,memecoin,"exit liquidity is forming above this level","выше этого уровня формируется exit liquidity",high
+18,both,memecoin,"full send on launch was a mistake","агрессивный вход на запуске был ошибкой",high
+19,both,community,"gm degens, what are we buying today","доброе утро, дегенсы, что берем сегодня",medium
+20,both,community,"gn ct, tomorrow we hunt new narras","спокойной ночи, завтра ищем новые нарративы",medium
+21,both,quality,"to the moon is back on timeline","в ленте снова настроение to the moon",medium
+22,both,quality,"few understand this trade","эту сделку понимают немногие",medium
+23,both,quality,"probably nothing but smart money is bidding","возможно ничего особенного, но умные деньги набирают",medium
+24,both,quality,"buy the dip worked again","покупка на просадке снова сработала",high
+25,both,quality,"fud on timeline, price keeps grinding up","в ленте FUD, а цена все равно медленно растет",high
+26,both,quality,"fomo entries get punished every cycle","FOMO-входы наказывают каждый цикл",high
+27,both,quality,"bagholders still waiting for miracle","багхолдеры все еще ждут чуда",high
+28,both,quality,"jeets sold the bottom again","джиты снова продали дно",high
+29,both,quality,"we got rugged and still learned nothing","нас скамнули, и мы ничему не научились",high
+30,both,quality,"this chart screams distribution","график явно похож на дистрибуцию",medium
+31,both,quality,"breakout failed, back to range","пробой не удержали, вернулись в диапазон",medium
+32,both,quality,"range low is holding for now","нижняя граница диапазона пока держится",medium
+33,both,quality,"order book is thin, expect wicks","стакан тонкий, возможны резкие тени",medium
+34,both,quality,"funding is crowded, careful with longs","фандинг перегрет, осторожно с лонгами",medium
+35,both,quality,"short squeeze soon if this level breaks","при пробое уровня возможен шорт-сквиз",medium
+36,both,quality,"spot bids are absorbing every dump","спотовые заявки выкупают каждую проливку",medium
+37,both,quality,"market makers are farming both sides","маркетмейкеры собирают ликвидность с обеих сторон",medium
+38,both,quality,"this looks like a classic bull trap","похоже на классическую ловушку быков",medium
+39,both,quality,"bear trap then violent reversal","ловушка медведей и резкий разворот",medium
+40,both,quality,"do not fade this momentum yet","пока рано шортить этот импульс",medium
+41,both,quality,"on-chain activity is quietly rising","ончейн-активность тихо растет",medium
+42,both,quality,"bridge volume exploded this week","объемы мостов резко выросли на неделе",medium
+43,both,quality,"airdrop farmers are rotating fast","аирдроп-фармеры быстро ротируются",medium
+44,both,quality,"whitelist spots are gone in minutes","места в вайтлисте разобрали за минуты",medium
+45,both,quality,"mint window closes in 2 hours","окно минта закрывается через 2 часа",medium
+46,both,quality,"burn schedule is monthly, not weekly","сжигание по расписанию ежемесячное, не еженедельное",medium
+47,both,quality,"validator set got stronger after upgrade","набор валидаторов усилился после апгрейда",low
+48,both,quality,"rpc is lagging under load","RPC лагает под нагрузкой",low
+49,both,quality,"oracle delay caused bad liquidations","задержка оракула вызвала плохие ликвидации",low
+50,both,quality,"protocol revenue finally turning positive","выручка протокола наконец выходит в плюс",low
+51,both,quality,"this thread is alpha if you read carefully","в этом треде полезная альфа, если читать внимательно",medium
+52,both,quality,"meta changed, old playbook is dead","мета изменилась, старый подход больше не работает",medium
+53,both,quality,"cooked chart but maybe dead cat bounce","график слабый, но возможен отскок дохлой кошки",medium
+54,both,quality,"send it if volume confirms","агрессивный вход только при подтверждении объемом",medium
+55,both,quality,"ape in small size first","сначала агрессивный вход маленьким объемом",medium
+56,both,quality,"risk off until CPI","снижаю риск до выхода CPI",low
+57,both,quality,"holding core bag, trading around it","держу основную позицию и торгую вокруг нее",low
+58,both,quality,"nfa but i like this setup","не финсовет, но этот сетап мне нравится",low
+59,both,quality,"dyor before aping random launch","проверь проект сам перед входом в случайный запуск",low
+60,both,quality,"ct is euphoric, i am trimming here","в крипто-твиттере эйфория, я частично фиксируюсь",high
